@@ -14,15 +14,15 @@ dotnet.config();
 //   throw new Error("Environment variable REPLIT_DOMAINS not provided");
 // }
 
-// const getOidcConfig = memoize(
-//   async () => {
-//     return await client.discovery(
-//       new URL(process.env.ISSUER_URL ?? "https://replit.com/oidc"),
-//       process.env.REPL_ID!
-//     );
-//   },
-//   { maxAge: 3600 * 1000 }
-// );
+const getOidcConfig = memoize(
+  async () => {
+    return await client.discovery(
+      new URL(process.env.ISSUER_URL ?? "https://replit.com/oidc"),
+      process.env.REPL_ID!
+    );
+  },
+  { maxAge: 3600 * 1000 }
+);
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
@@ -73,6 +73,12 @@ export async function setupAuth(app: Express) {
   app.use(getSession());
   app.use(passport.initialize());
   app.use(passport.session());
+
+  // Skip OIDC setup if REPL_ID is not provided (non-Replit environment)
+  if (!process.env.REPL_ID) {
+    console.log("REPL_ID not found - skipping OIDC authentication setup for development");
+    return;
+  }
 
   const config = await getOidcConfig();
 
@@ -130,6 +136,11 @@ export async function setupAuth(app: Express) {
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
+  // Skip authentication in development when REPL_ID is not set
+  if (!process.env.REPL_ID) {
+    return next();
+  }
+
   const user = req.user as any;
 
   if (!req.isAuthenticated() || !user.expires_at) {
